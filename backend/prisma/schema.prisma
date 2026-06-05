@@ -1,6 +1,3 @@
-// This is your Prisma schema file for the Medicine Reminder System
-// Learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,7 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── User model ────────────────────────────────────────────────────────────────
 model User {
   id        Int        @id @default(autoincrement())
   name      String     @db.VarChar(100)
@@ -19,34 +15,29 @@ model User {
   role      Role       @default(USER)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-
-  // Relations
   medicines Medicine[]
 
   @@index([email])
   @@map("users")
 }
 
-// ─── Medicine model ────────────────────────────────────────────────────────────
 model Medicine {
-  id              Int           @id @default(autoincrement())
+  id              Int        @id @default(autoincrement())
   userId          Int
-  name            String        @db.VarChar(200)
-  dosage          String        @db.VarChar(100)
-  date            DateTime      @db.Date
-  time            String        @db.VarChar(10)   // "HH:MM" format e.g. "08:30"
-  frequency       Frequency     @default(DAILY)
-  beforeAfterFood FoodTiming    @default(AFTER)
-  mealTimings     String?       @db.Text          // JSON array: ["AFTER_BREAKFAST", "AFTER_LUNCH", "AFTER_DINNER"]
-  notes           String?       @db.Text
-  reminderEnabled Boolean       @default(true)
-  taken           Boolean       @default(false)
+  name            String     @db.VarChar(200)
+  dosage          String     @db.VarChar(100)
+  date            DateTime   @db.Date
+  time            String     @db.VarChar(10)
+  frequency       Frequency  @default(DAILY)
+  beforeAfterFood FoodTiming @default(AFTER)
+  mealTimings     String?    @db.Text
+  notes           String?    @db.Text
+  reminderEnabled Boolean    @default(true)
+  taken           Boolean    @default(false)
   takenAt         DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, date])
@@ -54,7 +45,6 @@ model Medicine {
   @@map("medicines")
 }
 
-// ─── Enums ─────────────────────────────────────────────────────────────────────
 enum Role {
   USER
   ADMIN
