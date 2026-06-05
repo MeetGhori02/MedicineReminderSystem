@@ -213,6 +213,10 @@ npx prisma db push
 **CORS error:**
 Make sure `FRONTEND_URL` in `.env` matches your frontend URL.
 
+**Deployment notes:**
+- If you deploy the backend on Render, use an external MySQL provider (PlanetScale, AWS RDS, or Railway). Render's managed DBs are PostgreSQL-only.
+- Set the `DATABASE_URL` environment variable in your host to the MySQL connection string.
+
 **Notification not showing:**
 - Browser requires HTTPS for notifications in production
 - Click "Allow" when the browser asks for notification permission
