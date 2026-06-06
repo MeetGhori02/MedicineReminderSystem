@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../utils/prisma';
+import User from '../models/User';
+import Medicine from '../models/Medicine';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface RegisterInput {
@@ -13,6 +14,17 @@ export interface LoginInput {
   email: string;
   password: string;
 }
+
+type UserRole = 'USER' | 'ADMIN';
+
+const toUserDto = (user: any) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  createdAt: user.createdAt,
+  _count: user._count,
+});
 
 // ─── Token generator ──────────────────────────────────────────────────────────
 const generateToken = (userId: number, email: string, role: string): string => {
@@ -31,7 +43,7 @@ export const registerUser = async (input: RegisterInput) => {
   const { name, email, password } = input;
 
   // Check if email already exists
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await User.findOne({ email });
   if (existing) {
     throw new Error('Email already registered');
   }
@@ -40,14 +52,15 @@ export const registerUser = async (input: RegisterInput) => {
   const hashedPassword = await bcrypt.hash(password, 12);
 
   // Create user
-  const user = await prisma.user.create({
-    data: { name, email, password: hashedPassword },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
   });
 
-  const token = generateToken(user.id, user.email, user.role);
+  const token = generateToken(user._id, user.email, user.role as UserRole);
 
-  return { user, token };
+  return { user: toUserDto(user), token };
 };
 
 // ─── Login user ────────────────────────────────────────────────────────────────
@@ -55,7 +68,7 @@ export const loginUser = async (input: LoginInput) => {
   const { email, password } = input;
 
   // Find user by email
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await User.findOne({ email });
   if (!user) {
     throw new Error('Invalid email or password');
   }
@@ -66,29 +79,17 @@ export const loginUser = async (input: LoginInput) => {
     throw new Error('Invalid email or password');
   }
 
-  const token = generateToken(user.id, user.email, user.role);
+  const token = generateToken(user._id, user.email, user.role as UserRole);
 
-  // Return user without password
-  const { password: _pwd, ...safeUser } = user;
-  void _pwd; // suppress unused variable warning
-
-  return { user: safeUser, token };
+  return { user: toUserDto(user), token };
 };
 
 // ─── Get user profile ──────────────────────────────────────────────────────────
 export const getUserProfile = async (userId: number) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      createdAt: true,
-      _count: { select: { medicines: true } },
-    },
-  });
+  const user = await User.findById(userId).lean();
 
   if (!user) throw new Error('User not found');
-  return user;
+
+  const medicines = await Medicine.countDocuments({ userId });
+  return toUserDto({ ...user, _count: { medicines } });
 };

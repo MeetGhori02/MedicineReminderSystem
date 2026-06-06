@@ -1,5 +1,6 @@
 import cron from 'node-cron';
-import { prisma } from '../utils/prisma';
+import Medicine from '../models/Medicine';
+import User from '../models/User';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface PendingReminder {
@@ -10,6 +11,15 @@ interface PendingReminder {
   userId: number;
   user: { name: string; email: string };
 }
+
+const normalizeReminder = (medicine: any) => ({
+  id: medicine._id,
+  name: medicine.name,
+  dosage: medicine.dosage,
+  time: medicine.time,
+  userId: medicine.userId,
+  user: medicine.user,
+});
 
 // ─── Get current HH:MM time ────────────────────────────────────────────────────
 const getCurrentTime = (): string => {
@@ -29,22 +39,25 @@ const checkDueMedicines = async (): Promise<void> => {
 
   try {
     // Find all medicines due at the current minute that haven't been taken
-    const dueMedicines = await prisma.medicine.findMany({
-      where: {
-        time: currentTime,
-        taken: false,
-        reminderEnabled: true,
-        OR: [
-          { date: { gte: today, lt: tomorrow } },
-          { frequency: 'DAILY' },
-        ],
-      },
-      include: {
-        user: {
-          select: { name: true, email: true },
-        },
-      },
-    });
+    const dueMedicinesRaw = await Medicine.find({
+      time: currentTime,
+      taken: false,
+      reminderEnabled: true,
+      $or: [
+        { date: { $gte: today, $lt: tomorrow } },
+        { frequency: 'DAILY' },
+      ],
+    }).lean();
+
+    const dueMedicines = await Promise.all(
+      dueMedicinesRaw.map(async (medicine: any) => {
+        const user = await User.findById(medicine.userId).select({ name: 1, email: 1 }).lean() as any;
+        return normalizeReminder({
+          ...medicine,
+          user: user ? { name: user.name, email: user.email } : { name: 'Unknown', email: '' },
+        });
+      })
+    );
 
     if (dueMedicines.length > 0) {
       console.log(`⏰ [${currentTime}] ${dueMedicines.length} medicine reminder(s) triggered:`);
@@ -67,11 +80,11 @@ const checkDueMedicines = async (): Promise<void> => {
 // ─── Reset taken status at midnight for daily medicines ────────────────────────
 const resetDailyMedicines = async (): Promise<void> => {
   try {
-    const result = await prisma.medicine.updateMany({
-      where: { frequency: 'DAILY', taken: true },
-      data: { taken: false, takenAt: null },
-    });
-    console.log(`🔄 [MIDNIGHT] Reset ${result.count} daily medicine(s) to "not taken"`);
+    const result = await Medicine.updateMany(
+      { frequency: 'DAILY', taken: true },
+      { $set: { taken: false, takenAt: null, updatedAt: new Date() } }
+    );
+    console.log(`🔄 [MIDNIGHT] Reset ${result.modifiedCount} daily medicine(s) to "not taken"`);
   } catch (error) {
     console.error('❌ Daily reset error:', error);
   }
@@ -90,22 +103,28 @@ export const getUpcomingReminders = async (userId: number): Promise<PendingRemin
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  return prisma.medicine.findMany({
-    where: {
-      userId,
-      taken: false,
-      reminderEnabled: true,
-      time: { gte: currentTime, lte: futureTime },
-      OR: [
-        { date: { gte: today, lt: tomorrow } },
-        { frequency: 'DAILY' },
-      ],
-    },
-    include: {
-      user: { select: { name: true, email: true } },
-    },
-    orderBy: { time: 'asc' },
-  }) as Promise<PendingReminder[]>;
+  const medicines = await Medicine.find({
+    userId,
+    taken: false,
+    reminderEnabled: true,
+    time: { $gte: currentTime, $lte: futureTime },
+    $or: [
+      { date: { $gte: today, $lt: tomorrow } },
+      { frequency: 'DAILY' },
+    ],
+  }).sort({ time: 1 }).lean();
+
+  const reminders = await Promise.all(
+    medicines.map(async (medicine: any) => {
+      const user = await User.findById(medicine.userId).select({ name: 1, email: 1 }).lean() as any;
+      return normalizeReminder({
+        ...medicine,
+        user: user ? { name: user.name, email: user.email } : { name: 'Unknown', email: '' },
+      });
+    })
+  );
+
+  return reminders as PendingReminder[];
 };
 
 // ─── Start all schedulers ──────────────────────────────────────────────────────

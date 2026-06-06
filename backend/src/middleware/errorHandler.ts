@@ -22,20 +22,13 @@ export const errorHandler = (
 ): void => {
   console.error('❌ Error:', err);
 
-  // Handle Prisma errors
-  if (err.constructor.name === 'PrismaClientKnownRequestError') {
-    const prismaErr = err as unknown as { code: string; meta?: { target?: string[] } };
-    if (prismaErr.code === 'P2002') {
-      res.status(409).json({
-        success: false,
-        message: `Duplicate field: ${prismaErr.meta?.target?.join(', ')} already exists`,
-      });
-      return;
-    }
-    if (prismaErr.code === 'P2025') {
-      res.status(404).json({ success: false, message: 'Record not found' });
-      return;
-    }
+  // Handle Mongo duplicate key errors
+  if ((err as { code?: number }).code === 11000) {
+    res.status(409).json({
+      success: false,
+      message: 'Duplicate value already exists',
+    });
+    return;
   }
 
   // Handle JWT errors

@@ -6,6 +6,7 @@ import { medicineRouter } from './routes/medicines';
 import { dashboardRouter } from './routes/dashboard';
 import { errorHandler } from './middleware/errorHandler';
 import { startReminderScheduler } from './services/reminderScheduler';
+import connectMongo from './utils/mongo';
 
 // Load environment variables
 dotenv.config();
@@ -34,14 +35,22 @@ app.use('/api/dashboard', dashboardRouter);
 // ─── Global error handler ──────────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ─── Start server ──────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🚀 MRS Backend running on http://localhost:${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+// ─── Start server (connect to Mongo first) ───────────────────────────────────────
+(async () => {
+  try {
+    await connectMongo();
+    app.listen(PORT, () => {
+      console.log(`🚀 MRS Backend running on http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV}`);
 
-  // Start the background reminder scheduler
-  startReminderScheduler();
-  console.log('⏰ Reminder scheduler started');
-});
+      // Start the background reminder scheduler
+      startReminderScheduler();
+      console.log('⏰ Reminder scheduler started');
+    });
+  } catch (err) {
+    console.error('Failed to connect to MongoDB:', err);
+    process.exit(1);
+  }
+})();
 
 export default app;

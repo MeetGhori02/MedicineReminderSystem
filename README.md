@@ -1,6 +1,6 @@
 # 💊 MediRemind — Medicine Reminder System
 
-A full-stack medicine reminder web application built with React, Node.js, Prisma, and MySQL.
+A full-stack medicine reminder web application built with React, Node.js, Mongoose, and MongoDB Atlas.
 
 ---
 
@@ -10,8 +10,8 @@ A full-stack medicine reminder web application built with React, Node.js, Prisma
 |-----------|-------------------------------------|
 | Frontend  | React 18, TypeScript, Vite, Tailwind CSS |
 | Backend   | Node.js, Express, TypeScript        |
-| ORM       | Prisma                              |
-| Database  | MySQL                               |
+| ORM       | Mongoose                            |
+| Database  | MongoDB Atlas                       |
 | Auth      | JWT + bcrypt                        |
 | Scheduler | node-cron                           |
 
@@ -20,18 +20,16 @@ A full-stack medicine reminder web application built with React, Node.js, Prisma
 ## 📋 Prerequisites
 
 - **Node.js** v18+
-- **MySQL** running locally (port 3306)
+- **MongoDB Atlas** cluster or local MongoDB server
 - **npm** or **yarn**
 
 ---
 
 ## 🚀 Setup & Run Instructions
 
-### STEP 1 — Create the MySQL database
+### STEP 1 — Create the MongoDB database
 
-```sql
-CREATE DATABASE mrs;
-```
+Create a cluster in MongoDB Atlas and a database named `MRS`, or run a local MongoDB server and use `mongodb://localhost:27017/MRS`.
 
 ### STEP 2 — Backend setup
 
@@ -42,20 +40,9 @@ npm install
 
 Edit `.env` with your credentials:
 ```
-DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/mrs"
+MONGO_URI="mongodb+srv://<user>:<password>@<cluster>.mongodb.net/MRS?retryWrites=true&w=majority"
 JWT_SECRET="your-super-secret-key-change-this"
-```
-
-Run Prisma migrations to create tables:
-```bash
-npx prisma migrate dev --name init
-# OR just push the schema
-npx prisma db push
-```
-
-Generate Prisma client:
-```bash
-npx prisma generate
+FRONTEND_URL="https://your-vercel-frontend.vercel.app"
 ```
 
 Start the backend:
@@ -70,6 +57,7 @@ The API will be at **http://localhost:5000**
 ```bash
 cd frontend
 npm install
+npm run build
 npm run dev
 ```
 
@@ -98,7 +86,6 @@ mrs/
 │   │   │   ├── medicineService.ts
 │   │   │   └── reminderScheduler.ts
 │   │   └── utils/
-│   │       ├── prisma.ts
 │   │       └── response.ts
 │   ├── .env
 │   ├── package.json
@@ -202,59 +189,43 @@ Use these credentials after setup:
 
 ---
 
+## 🚀 Deployment
+
+### Backend on Render
+
+1. Push this repository to GitHub.
+2. Create a new Render Web Service from the repo.
+3. Use the backend folder as the root directory.
+4. Build Command: `npm install && npm run build`
+5. Start Command: `npm start`
+6. Add environment variables:
+  - `MONGO_URI` = your MongoDB Atlas connection string
+  - `JWT_SECRET` = a secure random string
+  - `NODE_ENV` = `production`
+  - `PORT` = `10000`
+  - `FRONTEND_URL` = your Vercel frontend URL
+
+### Frontend on Vercel
+
+1. Create a Vercel project from the same repo.
+2. Set the root directory to `frontend`.
+3. Build Command: `npm install && npm run build`
+4. Output Directory: `dist`
+5. Add environment variable:
+  - `VITE_API_BASE_URL` = your Render backend URL ending with `/api`
+
+### Verification
+
+1. Open the backend `/health` endpoint.
+2. Register a user from the app.
+3. Add a medicine.
+4. Check MongoDB Atlas or Compass and confirm the `users` and `medicines` collections contain the new documents.
+
 ## 🛠 Troubleshooting
 
-**Prisma migration error:**
-```bash
-npx prisma migrate reset  # WARNING: drops all data
-npx prisma db push
-```
-
-**CORS error:**
-Make sure `FRONTEND_URL` in `.env` matches your frontend URL.
-
-**Deployment notes:**
-- If you deploy the backend on Render, use an external MySQL provider (PlanetScale, AWS RDS, or Railway). Render's managed DBs are PostgreSQL-only.
-- Set the `DATABASE_URL` environment variable in your host to the MySQL connection string.
-
-### Deploying backend to Render (with external MySQL)
-
-1. Provision a MySQL database (examples):
-  - PlanetScale (serverless, free tier)
-  - Railway (provisions MySQL)
-  - AWS RDS / Amazon Aurora
-
-2. Note the MySQL connection string, e.g.:
-
-```
-mysql://USER:PASSWORD@HOST:3306/mrs
-```
-
-3. Create a new Render service from the repository (or use `render.yaml`):
-
- - In the Render dashboard, connect your GitHub repo and create a new Web Service.
- - Set **Root Directory** to `backend` (or let `render.yaml` handle it).
- - Build Command (if not using `render.yaml`):
-
-```bash
-npm install && npx prisma generate && npx prisma migrate deploy && npm run build
-```
-
- - Start Command: `npm start`
-
-4. In Render service settings → Environment, add the following environment variables:
-
- - `DATABASE_URL` = your MySQL connection string
- - `JWT_SECRET` = a secure random string
- - `FRONTEND_URL` = your frontend URL (e.g. `https://your-vercel-app.vercel.app`)
-
-5. Deploy. Render will run migrations (`npx prisma migrate deploy`) during build — if you prefer to run migrations manually, remove that step from the build command and run `npx prisma migrate deploy` once the DB is connected.
-
-6. Verify the service health at `/health` and point `VITE_API_BASE_URL` (in Vercel) to the Render service URL (including `/api` if needed), for example:
-
-```
-https://medi-remind-api.onrender.com/api
-```
+- If the backend cannot connect, verify `MONGO_URI` in Render and in `backend/.env`.
+- If CORS fails, make sure `FRONTEND_URL` exactly matches your deployed frontend URL.
+- If the frontend cannot call the API, confirm `VITE_API_BASE_URL` ends with `/api`.
 
 **Notification not showing:**
 - Browser requires HTTPS for notifications in production

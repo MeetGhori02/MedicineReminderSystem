@@ -16,9 +16,15 @@ export const medicineRouter = Router();
 
 // Helper to transform medicine data (parse JSON mealTimings)
 const transformMedicine = (medicine: any) => {
+  const mealTimings = Array.isArray(medicine.mealTimings)
+    ? medicine.mealTimings
+    : medicine.mealTimings
+      ? JSON.parse(medicine.mealTimings)
+      : [];
+
   return {
     ...medicine,
-    mealTimings: medicine.mealTimings ? JSON.parse(medicine.mealTimings) : [],
+    mealTimings,
   };
 };
 

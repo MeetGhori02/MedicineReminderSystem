@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { protect, AuthRequest, adminOnly } from '../middleware/auth';
-import { prisma } from '../utils/prisma';
+import User from '../models/User';
+import Medicine from '../models/Medicine';
 import { sendSuccess, sendServerError } from '../utils/response';
 
 export const dashboardRouter = Router();
@@ -8,13 +9,37 @@ dashboardRouter.use(protect);
 
 // Helper to transform medicine data (parse JSON mealTimings)
 const transformMedicine = (medicine: any) => {
+  const mealTimings = Array.isArray(medicine.mealTimings)
+    ? medicine.mealTimings
+    : medicine.mealTimings
+      ? JSON.parse(medicine.mealTimings)
+      : [];
+
   return {
     ...medicine,
-    mealTimings: medicine.mealTimings ? JSON.parse(medicine.mealTimings) : [],
+    mealTimings,
   };
 };
 
 const transformMedicines = (medicines: any[]) => medicines.map(transformMedicine);
+
+const normalizeMedicine = (medicine: any) => ({
+  id: medicine._id,
+  userId: medicine.userId,
+  name: medicine.name,
+  dosage: medicine.dosage,
+  date: medicine.date,
+  time: medicine.time,
+  frequency: medicine.frequency,
+  beforeAfterFood: medicine.beforeAfterFood,
+  mealTimings: medicine.mealTimings ? JSON.parse(medicine.mealTimings) : [],
+  notes: medicine.notes ?? null,
+  reminderEnabled: medicine.reminderEnabled,
+  taken: medicine.taken,
+  takenAt: medicine.takenAt,
+  createdAt: medicine.createdAt,
+  updatedAt: medicine.updatedAt,
+});
 
 // ─── GET /api/dashboard/summary ────────────────────────────────────────────────
 dashboardRouter.get('/summary', async (req: AuthRequest, res: Response): Promise<void> => {
@@ -26,24 +51,18 @@ dashboardRouter.get('/summary', async (req: AuthRequest, res: Response): Promise
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     // Fetch today's medicines
-    const todayMedicines = await prisma.medicine.findMany({
-      where: {
-        userId,
-        OR: [
-          { date: { gte: today, lt: tomorrow } },
-          { frequency: 'DAILY' },
-        ],
-      },
-      orderBy: { time: 'asc' },
-    });
+    const todayMedicines = (await Medicine.find({
+      userId,
+      $or: [
+        { date: { $gte: today, $lt: tomorrow } },
+        { frequency: 'DAILY' },
+      ],
+    }).sort({ time: 1 }).lean()).map(normalizeMedicine);
 
     // Stats over last 7 days
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekMedicines = await prisma.medicine.findMany({
-      where: { userId, date: { gte: weekAgo } },
-      select: { taken: true },
-    });
+    const weekMedicines = await Medicine.find({ userId, date: { $gte: weekAgo } }).select({ taken: 1 }).lean();
 
     const totalWeek = weekMedicines.length;
     const takenWeek = weekMedicines.filter((m) => m.taken).length;
@@ -55,16 +74,14 @@ dashboardRouter.get('/summary', async (req: AuthRequest, res: Response): Promise
     const threeDaysLater = new Date(now);
     threeDaysLater.setDate(threeDaysLater.getDate() + 3);
 
-    const upcomingCandidates = await prisma.medicine.findMany({
-      where: {
-        userId,
-        taken: false,
-        OR: [
-          { frequency: 'DAILY' },
-          { date: { gte: today, lt: threeDaysLater } },
-        ],
-      },
-    });
+    const upcomingCandidates = await Medicine.find({
+      userId,
+      taken: false,
+      $or: [
+        { frequency: 'DAILY' },
+        { date: { $gte: today, $lt: threeDaysLater } },
+      ],
+    }).lean();
 
     const upcoming = upcomingCandidates
       .map((medicine) => {
@@ -79,17 +96,14 @@ dashboardRouter.get('/summary', async (req: AuthRequest, res: Response): Promise
           }
         }
 
-        return {
-          ...medicine,
-          date: nextDate,
-        };
+        return normalizeMedicine({ ...medicine, date: nextDate });
       })
-      .filter((medicine) => medicine.date >= now && medicine.date < threeDaysLater)
+      .filter((medicine) => new Date(medicine.date) >= now && new Date(medicine.date) < threeDaysLater)
       .sort((a, b) => a.date.getTime() - b.date.getTime())
       .slice(0, 5);
 
     // Total medicines count
-    const totalMedicines = await prisma.medicine.count({ where: { userId } });
+    const totalMedicines = await Medicine.countDocuments({ userId });
 
     sendSuccess(res, {
       today: {
@@ -115,23 +129,22 @@ dashboardRouter.get('/summary', async (req: AuthRequest, res: Response): Promise
 // ─── GET /api/dashboard/admin (admin only) ─────────────────────────────────────
 dashboardRouter.get('/admin', adminOnly, async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const totalUsers = await prisma.user.count();
-    const totalMedicines = await prisma.medicine.count();
-    const takenMedicines = await prisma.medicine.count({ where: { taken: true } });
-    const pendingMedicines = await prisma.medicine.count({ where: { taken: false } });
+    const totalUsers = await User.countDocuments();
+    const totalMedicines = await Medicine.countDocuments();
+    const takenMedicines = await Medicine.countDocuments({ taken: true });
+    const pendingMedicines = await Medicine.countDocuments({ taken: false });
 
-    const recentUsers = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        _count: { select: { medicines: true } },
-      },
-    });
+    const recentUsersRaw = await User.find().sort({ createdAt: -1 }).limit(10).lean();
+    const recentUsers = await Promise.all(
+      recentUsersRaw.map(async (user: any) => ({
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        _count: { medicines: await Medicine.countDocuments({ userId: user._id }) },
+      }))
+    );
 
     sendSuccess(res, {
       stats: { totalUsers, totalMedicines, takenMedicines, pendingMedicines },
