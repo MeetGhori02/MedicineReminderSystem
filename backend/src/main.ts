@@ -18,6 +18,7 @@ const normalizeOrigin = (origin: string): string => origin.replace(/\/$/, '');
 
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
   process.env.CORS_ORIGIN,
   'http://localhost:5173',
   'http://127.0.0.1:5173',

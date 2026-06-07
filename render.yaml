@@ -5,7 +5,7 @@ services:
     branch: main
     rootDir: backend
     buildCommand: |
-      npm install
+      npm install --include=dev
       npm run build
     startCommand: npm start
     healthCheckPath: /health
@@ -16,6 +16,8 @@ services:
       - key: PORT
         value: 10000
       - key: FRONTEND_URL
+        value: https://medicine-reminder-system-mdpb.vercel.app
+      - key: CLIENT_URL
         value: https://medicine-reminder-system-mdpb.vercel.app
       - key: MONGO_URI
         sync: false
