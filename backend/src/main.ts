@@ -22,6 +22,7 @@ const allowedOrigins = [
   process.env.CORS_ORIGIN,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://medicine-reminder-system-mdpb.vercel.app',
 ]
   .filter((origin): origin is string => Boolean(origin))
   .map(normalizeOrigin);
